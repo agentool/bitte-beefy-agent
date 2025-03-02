@@ -2,20 +2,22 @@ import { handle } from "hono/vercel";
 import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
 import { DEPLOYMENT_URL } from "vercel-url";
 import { getTopBeefyVaults } from "@/lib";
-import { BeefyResponseSchema, ErrorResponseSchema, HealthCheckSchema, GenerateUrlRequestSchema, GenerateUrlResponseSchema } from "@/lib/schemas";
-import { isValidAddress, SUPPORTED_CHAINS } from '@/lib/utils';
-import { API_ENDPOINTS, OPERATION_IDS } from '@/lib/constants';
-import { formatUnits } from "ethers";
+import { 
+  BeefyResponseSchema, 
+  ErrorResponseSchema, 
+  CreateTransactionSchema,
+  TransactionResponseSchema 
+} from "@/lib/schemas";
 
 const app = new OpenAPIHono();
 
 // Define route for fetching top yielding Beefy vaults
 const getBeefyRoute = createRoute({
-  operationId: OPERATION_IDS.TOP_BEEFY_VAULTS,
+  operationId: "top-beefy-vaults",
   description:
     "Get highest yielding vaults from Beefy Finance with detailed information about TVL, platform, chain, risks, and safety scores (0-100). Example: 'Show me the top 5 yield opportunities, taking into account safety scores and platform stability'",
   method: "get",
-  path: API_ENDPOINTS.TOP_VAULTS,
+  path: "/api/top-beefy-vaults",
   responses: {
     200: {
       content: {
@@ -24,7 +26,7 @@ const getBeefyRoute = createRoute({
         },
       },
       description:
-        "Returns top 200 vaults sorted by TVL, including detailed vault information",
+        "Returns top 20 vaults sorted by APY, including detailed vault information",
     },
     400: {
       content: {
@@ -34,14 +36,6 @@ const getBeefyRoute = createRoute({
       },
       description: "Bad request or failed to fetch data from Beefy API",
     },
-    500: {
-      content: {
-        "application/json": {
-          schema: ErrorResponseSchema,
-        },
-      },
-      description: "Server error",
-    }
   },
   tags: ["Vaults"],
 });
@@ -52,10 +46,84 @@ app.openapi(getBeefyRoute, async (c) => {
     const vaults = await getTopBeefyVaults();
     return c.json(vaults, 200);
   } catch (error) {
-    if (error instanceof Error) {
-      return c.json({ error: error.message }, 400);
+    return c.json({ error: "Failed to fetch Beefy data" }, 400);
+  }
+});
+
+// Define route for creating a transaction
+const createTransactionRoute = createRoute({
+  operationId: "create-transaction",
+  description: "Create an unsigned transaction for depositing into a Beefy vault",
+  method: "post",
+  path: "/api/create-transaction",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: CreateTransactionSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: TransactionResponseSchema,
+        },
+      },
+      description: "Returns an unsigned transaction payload",
+    },
+    400: {
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+      description: "Bad request or vault not found",
+    },
+  },
+  tags: ["Transactions"],
+});
+
+// Handle transaction creation requests
+app.openapi(createTransactionRoute, async (c) => {
+  try {
+    const body = await c.req.json();
+    const { vaultId, amount, userWallet } = CreateTransactionSchema.parse(body);
+
+    // Get current vault data to verify vault exists
+    const beefyData = await getTopBeefyVaults();
+    const vault = beefyData.vaults.find(v => v.addLiquidityUrl.includes(vaultId));
+    
+    if (!vault) {
+      return c.json({ error: "Vault not found" }, 400);
     }
-    return c.json({ error: "Internal server error" }, 500);
+
+    // Create transaction payload following Bitte Wallet format
+    const transactionPayload = {
+      receiverId: vault.platform,
+      actions: [{
+        type: "FunctionCall" as const,
+        params: {
+          methodName: "deposit",
+          args: {
+            vaultId,
+            amount
+          },
+          gas: "200000000000000", // Using the same gas limit as in Bitte's example
+          deposit: amount // The amount to deposit
+        }
+      }],
+      meta: {
+        instructions: `Deposit ${amount} into vault: ${vault.name}`,
+        userWallet
+      }
+    };
+
+    return c.json(transactionPayload, 200);
+  } catch (error: any) {
+    return c.json({ error: error.message || "Failed to create transaction" }, 400);
   }
 });
 
@@ -84,40 +152,9 @@ app.doc("/.well-known/ai-plugin.json", {
     assistant: {
       name: "Beefy Yield Agent",
       description:
-        "An assistant that helps find the best yield opportunities on Beefy Finance with safety in mind and can execute vault transactions.",
+        "An assistant that helps find the best yield opportunities on Beefy Finance with safety in mind.",
       instructions:
-        "Get top-beefy-vaults, then analyze metrics to suggest the best opportunities matching user requirements. Can generate deposit URLs using generate-deposit-url tool to help users connect their wallet and deposit. Supports multiple EVM networks.",
-      tools: [
-        { 
-          type: "function",
-          function: {
-            name: "generate-deposit-url",
-            description: "Creates a clickable deposit URL that opens our deposit interface with pre-filled parameters. Example: Calling this with vault=0x123... amount=1000000 chainId=8453 returns a URL you can click to deposit 0.001 ETH", 
-            parameters: {
-              type: "object",
-              properties: {
-                vault: {
-                  type: "string",
-                  description: "Vault address (e.g., 0xA6854c1F54198D351D6d4263806F5A876099839b for cbETH-WETH LP)"
-                },
-                amount: {
-                  type: "string",
-                  description: "Amount in wei (e.g., 1000000000000000 for 0.001 ETH)"
-                },
-                chainId: {
-                  type: "number",
-                  description: "Chain ID (e.g., 8453 for Base network)"
-                },
-                tokenAddress: {
-                  type: "string",
-                  description: "Token address (e.g., 0x4200000000000000000000000000000000000006 for WETH on Base)"
-                }
-              },
-              required: ["vault", "amount", "chainId", "tokenAddress"]
-            }
-          }
-        }
-      ],
+        "Get top-beefy-vaults, then analyze metrics to suggest the best opportunities matching user requirements.",
       image: (config?.url || DEPLOYMENT_URL) + "/beefy-agent-logo.png",
     },
   },
@@ -158,101 +195,6 @@ app.get("/api/swagger", (c) => {
       </body>
     </html>
   `);
-});
-
-// Health check endpoint
-app.openapi(
-  {
-    method: 'get',
-    path: API_ENDPOINTS.HEALTH,
-    operationId: OPERATION_IDS.HEALTH_CHECK,
-    description: 'Check if the service is running',
-    responses: {
-      200: {
-        description: 'Service status',
-        content: {
-          'application/json': {
-            schema: HealthCheckSchema,
-          },
-        },
-      },
-    },
-  },
-  (c) => {
-    return c.json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-    });
-  }
-);
-
-const transactionRoute = createRoute({
-  method: 'post',
-  path: API_ENDPOINTS.GENERATE_DEPOSIT_URL,
-  operationId: 'generate-deposit-url',
-  description: 'Generate a URL for depositing into a Beefy vault. Returns a clickable link that opens our deposit interface with pre-filled transaction details.',
-  request: {
-    body: {
-      content: {
-        'application/json': {
-          schema: GenerateUrlRequestSchema
-        }
-      }
-    }
-  },
-  responses: {
-    200: {
-      description: 'Transaction URL generated successfully',
-      content: {
-        'application/json': {
-          schema: GenerateUrlResponseSchema
-        }
-      }
-    },
-    400: {
-      description: 'Invalid parameters',
-      content: {
-        'application/json': {
-          schema: ErrorResponseSchema
-        }
-      }
-    }
-  }
-});
-
-app.openapi(transactionRoute, async (c) => {
-  try {
-    const { vault, amount, vaultId, chainId, tokenAddress } = await c.req.json();
-    
-    // Validate inputs
-    if (!vault || !amount || !chainId || !tokenAddress) {
-      throw new Error('Missing required parameters');
-    }
-
-    // Validate chain ID
-    if (!(chainId in SUPPORTED_CHAINS)) {
-      throw new Error(`Unsupported chain ID. Supported chains are: ${Object.entries(SUPPORTED_CHAINS)
-        .map(([id, name]) => `${id} (${name})`)
-        .join(', ')}`);
-    }
-
-    // Validate addresses
-    if (!isValidAddress(vault) || !isValidAddress(tokenAddress)) {
-      throw new Error('Invalid address format');
-    }
-
-    const url = `${DEPLOYMENT_URL}/deposit?vault=${vault}&amount=${amount}&chainId=${chainId}&tokenAddress=${tokenAddress}`;
-    
-    return c.json({
-      url,
-      message: `Click to deposit ${formatUnits(BigInt(amount), 18)} ETH into vault ${vault}`
-    }, 200);
-  } catch (error) {
-    console.error('URL generation failed:', error);
-    return c.json({ 
-      error: error instanceof Error ? error.message : "Internal server error" 
-    }, 400);
-  }
 });
 
 export const GET = handle(app);

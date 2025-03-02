@@ -16,7 +16,6 @@ export const BeefyVaultSchema = z.object({
   platform: z.string(),
   chain: z.string(),
   assets: z.array(z.string()),
-  vaultAddress: z.string(),
   risks: z.array(z.string()).optional(),
   addLiquidityUrl: z.string(),
   lastHarvest: z.number().optional(),
@@ -37,26 +36,38 @@ export const ErrorResponseSchema = z.object({
   error: z.string(),
 });
 
-// Health Check Response
-export const HealthCheckSchema = z.object({
-  status: z.string(),
-  timestamp: z.string()
-});
-
-// URL Generation Request Schema
-export const GenerateUrlRequestSchema = z.object({
-  vault: z.string().describe('The vault address to deposit into'),
-  amount: z.string().describe('The amount to deposit in ETH'),
-  chainId: z.number().describe('The chain ID where the vault is deployed'),
-  vaultId: z.string().optional().describe('The Beefy vault identifier for linking to app.beefy.com'),
-  tokenAddress: z.string().describe('The address of the token to deposit (WETH for ETH deposits)')
-});
-
-// URL Generation Response Schema
-export const GenerateUrlResponseSchema = z.object({
-  url: z.string().describe('URL to the deposit interface with pre-filled parameters'),
-  message: z.string().describe('Human readable description of the deposit')
-});
-
 export type BeefyResponse = z.infer<typeof BeefyResponseSchema>;
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+
+// Schema for transaction request
+export const CreateTransactionSchema = z.object({
+  vaultId: z.string(),
+  amount: z.string(),
+  userWallet: z.string()
+});
+
+// Schema for transaction response
+export const TransactionResponseSchema = z.object({
+  receiverId: z.string(),
+  actions: z.array(
+    z.object({
+      type: z.literal("FunctionCall"),
+      params: z.object({
+        methodName: z.string(),
+        args: z.object({
+          vaultId: z.string(),
+          amount: z.string()
+        }),
+        gas: z.string(),
+        deposit: z.string()
+      })
+    })
+  ),
+  meta: z.object({
+    instructions: z.string(),
+    userWallet: z.string()
+  })
+});
+
+export type CreateTransaction = z.infer<typeof CreateTransactionSchema>;
+export type TransactionResponse = z.infer<typeof TransactionResponseSchema>;

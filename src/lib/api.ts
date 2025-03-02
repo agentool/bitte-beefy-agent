@@ -1,7 +1,7 @@
 import { BeefyResponse, BeefyVault } from './schemas';
 
 // API endpoints for Beefy Finance
-export const BEEFY_API = {
+const BEEFY_API = {
   VAULTS: 'https://api.beefy.finance/vaults',
   APY: 'https://api.beefy.finance/apy',
   APY_BREAKDOWN: 'https://api.beefy.finance/apy/breakdown',
@@ -45,7 +45,6 @@ function transformVaultData(
         platform: vault.platformId,
         chain: vault.network || vault.chain,
         assets: vault.assets,
-        vaultAddress: vault.earnContractAddress,
         risks: vault.risks,
         addLiquidityUrl: `https://app.beefy.com/vault/${vault.id}`,
         lastHarvest: vault.lastHarvest,

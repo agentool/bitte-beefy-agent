@@ -4,43 +4,28 @@ Bitte Beefy Agent is a tool for streamlining earning the highest APYs across 23 
 
 ## Overview
 
-Built using Next.js 14 + Shadcn/ui + Hono + Zod + Swagger UI.
+Built using Next.js 14 + Shadcn/ui + Hono (using FastNear, NearSocial) + Zod + Swagger UI.
 
-## API Base URL
+## Backlog
+
+- [ ] Add more detailed signals to the agent
+- [ ] Add support for building transactions directly from the agent
+
+## Project Walkthrough
+
+The template supports creating, managing, and deploying the Bitte Beefy Agent functionalities.
+
+### API Base URL
 
 <https://bitte-beefy-agent.vercel.app>
 
-## Endpoints
+### Endpoints
 
-1. **Get Top Vaults** 
-   - `GET /api/beefy-top-vaults`
-   - Returns highest yielding vaults with safety scores and details
-   - Example: "Show me the top 5 yield opportunities on Base"
+- Highest yielding vaults from Beefy Finance `GET` `/api/beefy-top-vaults`
 
-2. **Generate Deposit URL**
-   - `POST /api/generate-deposit-url`
-   - Creates a clickable deposit link with pre-filled transaction details
-   - Required params: vault address, amount, chainId, tokenAddress
-   - Optional: vaultId (for Beefy app linking)
-   - Example: "I want to deposit 0.1 ETH into the cbETH-WETH vault"
+### Usage
 
-## Usage Flow
-
-1. AI fetches top vaults and analyzes them for the user
-2. User selects a vault to deposit into
-3. AI generates a deposit URL with all necessary parameters
-4. User clicks the link to open our deposit interface
-5. Interface handles wallet connection, network switching, and deposit execution
-
-## Example AI Interaction
-
-"Show me the safest yield opportunities on Base with at least 10% APY"
-1. AI fetches vaults from `/api/beefy-top-vaults`
-2. AI analyzes metrics (TVL, safety score, APY) to find best matches
-3. AI presents filtered options to user
-4. User: "I want to deposit 0.1 ETH into the cbETH-WETH vault"
-5. AI uses `/api/generate-deposit-url` to create deposit link
-6. User clicks link to execute deposit through our interface
+Make LLM requests to the endpoints above. Refer to the full API documentation for detailed parameter and response information.
 
 ## Getting Started
 
@@ -81,30 +66,13 @@ make-agent deploy -u https://bitte-beefy-agent.vercel.app
 
 ## Troubleshooting
 
-- Transaction errors (400):
-  - Check vault/safe addresses are valid Ethereum addresses
-  - Verify amount is in wei (18 decimals)
-  - Confirm chainId is supported (1: Ethereum, 8453: Base, 42161: Arbitrum)
-  - Check server logs for validation errors
-
-- Development server:
-  - Port 3000 already in use? Kill process or change port
-  - Check .env.local has NEAR_ENV="mainnet"
-
+- Errors starting the Next.js development server:
+  - Use ai to troubleshoot the error message
+- Errors starting the agent development server:
+  - Try again in 24 hours
 - Unexpected response from the agent:
   - Check response from https://localhost:3000/.well-known/ai-plugin.json
   - Check response from your plugin API endpoints
   - Check the tunneling service url
-
 - Error deploying the agent:
   - Check validity of https://bitte-beefy-agent.vercel.app/.well-known/ai-plugin.json openapi schema
-
-### Environment Variables
-
-Required in your `.env.local` and Vercel deployment:
-
-```bash
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID="your_project_id_here"
-```
-
-Get your WalletConnect project ID from [WalletConnect Cloud](https://cloud.walletconnect.com/)
